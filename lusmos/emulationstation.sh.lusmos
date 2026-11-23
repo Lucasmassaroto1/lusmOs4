@@ -1,0 +1,16 @@
+#!/bin/bash
+# lusmOS 4 - abre a interface do lusmOS.
+# Segure A enquanto liga para abrir o modo de recuperação.
+
+export SDL_ASSERT="always_ignore"
+sudo chmod 666 /dev/tty1
+export TERM=linux
+export XDG_RUNTIME_DIR=/run/user/$UID/
+
+unset LUSMOS_RECOVERY
+evtest --query /dev/input/event2 EV_KEY BTN_SOUTH
+if [ "$?" -eq "10" ]; then
+  export LUSMOS_RECOVERY=1
+fi
+
+exec /opt/lusmos/lusmos.sh

@@ -1,0 +1,42 @@
+# lusmOS 4 - tela de boot (Plymouth script)
+# Mesmo desenho do comeco da animacao: logo, nome e barra nos mesmos lugares.
+Window.SetBackgroundTopColor(0.027, 0.031, 0.047);
+Window.SetBackgroundBottomColor(0.027, 0.031, 0.047);
+
+bg.image = Image("boot.png");
+ox = Window.GetX() + (Window.GetWidth() - bg.image.GetWidth()) / 2;
+oy = Window.GetY() + (Window.GetHeight() - bg.image.GetHeight()) / 2;
+bg.sprite = Sprite(bg.image);
+bg.sprite.SetPosition(ox, oy, 0);
+
+dot.image = Image("dot.png");
+dot.sprite = Sprite(dot.image);
+dot.sprite.SetZ(2);
+
+bar_bg.image = Image("bar_bg.png");
+bar_bg.sprite = Sprite(bar_bg.image);
+bar_bg.sprite.SetPosition(ox + 230, oy + 358, 1);
+
+bar.image = Image("bar.png");
+bar.sprite = Sprite();
+bar.sprite.SetPosition(ox + 230, oy + 358, 2);
+
+angle = 0;
+fun refresh_callback ()
+  {
+    angle = angle + 0.08;
+    dot.sprite.SetX(ox + 320 + 66 * Math.Sin(angle) - 5);
+    dot.sprite.SetY(oy + 190 - 66 * Math.Cos(angle) - 5);
+  }
+Plymouth.SetRefreshFunction(refresh_callback);
+
+fun progress_callback (duration, progress)
+  {
+    w = Math.Int(bar.image.GetWidth() * progress);
+    if (w < 1) w = 1;
+    bar.sprite.SetImage(bar.image.Scale(w, bar.image.GetHeight()));
+  }
+Plymouth.SetBootProgressFunction(progress_callback);
+
+fun message_callback (text) { }
+Plymouth.SetMessageFunction(message_callback);

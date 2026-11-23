@@ -1,0 +1,12 @@
+[Unit]
+Description=lusmOS - protege os arquivos do lusmOS
+Before=emulationstation.service
+After=local-fs.target
+
+[Service]
+Type=oneshot
+ExecStart=/opt/lusmos/guard.sh
+RemainAfterExit=no
+
+[Install]
+WantedBy=multi-user.target

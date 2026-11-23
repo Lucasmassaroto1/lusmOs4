@@ -1,0 +1,32 @@
+name: Publicar atualização
+
+# Ao criar uma tag v<versao> (igual ao lusmos/VERSION), monta o pacote
+# e publica a release. O console baixa a release mais nova pelo Wi-Fi.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Conferir a versão
+        run: |
+          VER=$(tr -d '[:space:]' < lusmos/VERSION)
+          test "v$VER" = "$GITHUB_REF_NAME" || { echo "A tag $GITHUB_REF_NAME não bate com lusmos/VERSION ($VER)"; exit 1; }
+      - name: Montar o pacote
+        run: tools/release.sh
+      - name: Publicar a release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VER=$(tr -d '[:space:]' < lusmos/VERSION)
+          NOTES_FILE=notas/$VER.md
+          if [ -f "$NOTES_FILE" ]; then ARGS=(--notes-file "$NOTES_FILE"); else ARGS=(--notes "lusmOS $VER"); fi
+          TITLE=$(head -n1 "$NOTES_FILE" 2>/dev/null | sed 's/^# *//')
+          gh release create "$GITHUB_REF_NAME" dist/lusmos-$VER.tar.gz dist/lusmos-$VER.tar.gz.sha256 \
+            --title "${TITLE:-lusmOS $VER}" "${ARGS[@]}"
