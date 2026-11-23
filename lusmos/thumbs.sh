@@ -9,8 +9,10 @@ if [ -f "$PID" ] && kill -0 "$(cat "$PID")" 2>/dev/null; then exit 0; fi
 echo $$ > "$PID"
 renice -n 19 $$ >/dev/null 2>&1
 ionice -c3 -p $$ >/dev/null 2>&1
+W=/tmp/lusmos_thumbq.work
+# se a vez anterior foi interrompida (jogo aberto), continua de onde parou
+[ -s "$W" ] && { cat "$W" >> "$Q"; rm -f "$W"; }
 while [ -s "$Q" ]; do
-  W=/tmp/lusmos_thumbq.work
   mv -f "$Q" "$W"
   while IFS=$'\t' read -r src dst; do
     [ -z "$src" ] || [ ! -f "$src" ] && continue

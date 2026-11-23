@@ -128,6 +128,14 @@ EOT
   echo "tela de boot do lusmOS instalada"
 fi
 
+# ---------------------------------------------------------------- boot mais limpo
+# a animacao agora e tocada pelo proprio lusmOS; o video separado do boot sai
+# (antes o logo aparecia 3 vezes: tela de boot, video e lusmOS)
+if systemctl list-unit-files 2>/dev/null | grep -q '^play-video.service'; then
+  systemctl disable play-video.service 2>/dev/null; systemctl mask play-video.service 2>/dev/null && echo "video do boot desligado (a animacao fica no lusmOS)"
+fi
+[ -f "$SRC/bootfiles/logo.bmp" ] && cp -f "$SRC/bootfiles/logo.bmp" /boot/logo.bmp
+
 mkdir -p /home/ark/.config/lusmos
 rm -f /home/ark/.config/lusmos/use_es
 chown -R 1002:1002 /home/ark/.config/lusmos

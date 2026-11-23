@@ -55,6 +55,9 @@ while true; do
   case "$kind" in
     game|tool)
       fails=0
+      # nada pesado em segundo plano durante o jogo (miniaturas das capas param e voltam depois)
+      tp=$(cat /tmp/lusmos_thumbs.pid 2>/dev/null)
+      if [ -n "$tp" ]; then pkill -P "$tp" 2>/dev/null; kill "$tp" 2>/dev/null; rm -f /tmp/lusmos_thumbs.pid; fi
       clear_tty
       log "$kind: $cmd"
       bash -c "$cmd"

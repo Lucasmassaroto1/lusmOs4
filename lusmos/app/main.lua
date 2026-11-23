@@ -11,7 +11,7 @@ local U = require("ui")
 local lg = love.graphics
 
 local VERSION = "4"              -- versao mostrada na tela
-local BUILD = "4-2026.11.23d"    -- numero interno (so aparece no registro de erros)
+local BUILD = "4-2026.11.23e"    -- numero interno (so aparece no registro de erros)
 local NEXT_FILE = os.getenv("LUSMOS_NEXT") or "/tmp/lusmos_next"
 local STATE_FILE = "/tmp/lusmos_state.lua"
 local CACHE_FILE = "/tmp/lusmos_counts.lua"
@@ -749,6 +749,11 @@ Screens.loading = function(arg)
       drawIntro(math.min(self.t, INTRO_LEN))
     elseif self.mode == "plain" then
       U.rect(0, 0, 640, 480, 0, data.config.layout == "cruz" and U.hex("#0F1220") or U.c.bg2)
+    elseif self.mode == "dot" then
+      -- igual a tela de boot: fundo escuro e o pontinho girando
+      U.rect(0, 0, 640, 480, 0, U.hex("#07080C"))
+      local ang = app.t * 2.6
+      U.circle(320 + 66 * math.sin(ang), 190 - 66 * math.cos(ang), 5, LIGHT, 1)
     else
       drawFinal()
     end
@@ -3005,6 +3010,9 @@ function love.load()
     pcall(love.joystick.loadGamepadMappings, db)
   end
   data.loadConfig()
+  local fb = io.open("/tmp/lusmos_booted", "r")
+  local firstOpen = fb == nil
+  if fb then fb:close() end
   restoreHW()
   loadSounds()
   data.loadRecents()
@@ -3014,7 +3022,9 @@ function love.load()
   os.remove(NEXT_FILE)
   loadIntroImages()
   local st = readState()
-  local mode = "boot"
+  -- o logo aparece uma vez so por boot: a animacao toca na primeira abertura do lusmOS
+  -- (a tela de boot e o inicio do sistema mostram so o pontinho girando)
+  local mode = firstOpen and "anim" or "dot"
   if st then mode = (data.config.returnAnim == false) and "plain" or "anim" end
   replace("loading", { mode = mode, state = st })
 end
