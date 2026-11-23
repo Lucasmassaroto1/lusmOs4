@@ -22,17 +22,13 @@ e ligue o console. A instalação roda sozinha no boot.
 ## Publicar uma versão nova
 
 1. Faça as mudanças.
-2. Troque o número em `lusmos/VERSION` (formato `4-AAAA.MM.DDx`, por exemplo `4-2026.11.23a`).
-3. Opcional: escreva as notas em `notas/<versão>.md` (a primeira linha vira o título).
-4. Crie e envie a tag com o mesmo número:
+2. Troque o número em `lusmos/VERSION` (formato `4-AAAA.MM.DDx`, por exemplo `4-2026.11.24a`).
+   O número novo precisa ser "maior" que o anterior: a data mais nova, ou a mesma data com a letra seguinte.
+3. Opcional: escreva as notas em `notas/<versão>.md`. A primeira linha vira o título, que também aparece no console.
+4. Envie para a branch `main`.
 
-```bash
-git tag v4-2026.11.23a
-git push origin v4-2026.11.23a
-```
-
-O GitHub monta o pacote (`tools/release.sh`) e publica a release.
-Os consoles com Wi-Fi passam a ver a atualização.
+Quando o `lusmos/VERSION` muda, o GitHub monta o pacote (`tools/release.sh`) e publica a release `v<versão>` sozinho
+(aba **Actions**). Os consoles com Wi-Fi passam a ver a atualização.
 
 ## Estrutura
 

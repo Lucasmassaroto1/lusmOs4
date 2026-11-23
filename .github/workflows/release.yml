@@ -1,10 +1,13 @@
 name: Publicar atualização
 
-# Ao criar uma tag v<versao> (igual ao lusmos/VERSION), monta o pacote
-# e publica a release. O console baixa a release mais nova pelo Wi-Fi.
+# Quando o número em lusmos/VERSION muda na branch main, o GitHub monta o
+# pacote e publica a release v<versao>. O console baixa a release mais nova
+# pelo Wi-Fi. (Também dá para rodar à mão em Actions › Run workflow.)
 on:
   push:
-    tags: ["v*"]
+    branches: [main]
+    paths: ["lusmos/VERSION"]
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -14,23 +17,33 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Conferir a versão
-        run: |
-          VER=$(tr -d '[:space:]' < lusmos/VERSION)
-          test "v$VER" = "$GITHUB_REF_NAME" || { echo "A tag $GITHUB_REF_NAME não bate com lusmos/VERSION ($VER)"; exit 1; }
-      - name: Montar o pacote
-        run: tools/release.sh
-      - name: Publicar a release
+      - name: Ler a versão
+        id: v
+        run: echo "ver=$(tr -d '[:space:]' < lusmos/VERSION)" >> "$GITHUB_OUTPUT"
+      - name: Ver se essa versão já foi publicada
+        id: exists
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          VER=$(tr -d '[:space:]' < lusmos/VERSION)
-          NOTES_FILE=notas/$VER.md
-          if [ -f "$NOTES_FILE" ]; then ARGS=(--notes-file "$NOTES_FILE"); else ARGS=(--notes "lusmOS $VER"); fi
-          TITLE=$(head -n1 "$NOTES_FILE" 2>/dev/null | sed 's/^# *//')
-          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
-            gh release upload "$GITHUB_REF_NAME" dist/lusmos-$VER.tar.gz dist/lusmos-$VER.tar.gz.sha256 --clobber
-          else
-            gh release create "$GITHUB_REF_NAME" dist/lusmos-$VER.tar.gz dist/lusmos-$VER.tar.gz.sha256 \
-              --title "${TITLE:-lusmOS $VER}" "${ARGS[@]}"
+          if gh release view "v${{ steps.v.outputs.ver }}" >/dev/null 2>&1; then
+            echo "Versão ${{ steps.v.outputs.ver }} já publicada, nada a fazer."
+            echo "skip=1" >> "$GITHUB_OUTPUT"
           fi
+      - name: Montar o pacote
+        if: steps.exists.outputs.skip != '1'
+        run: tools/release.sh
+      - name: Publicar a release
+        if: steps.exists.outputs.skip != '1'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VER=${{ steps.v.outputs.ver }}
+          NOTES=notas/$VER.md
+          if [ -f "$NOTES" ]; then
+            TITLE=$(head -n1 "$NOTES" | sed 's/^# *//')
+            tail -n +2 "$NOTES" > /tmp/notas.md
+          else
+            TITLE="lusmOS $VER"; echo "lusmOS $VER" > /tmp/notas.md
+          fi
+          gh release create "v$VER" dist/lusmos-$VER.tar.gz dist/lusmos-$VER.tar.gz.sha256 \
+            --target "$GITHUB_SHA" --title "$TITLE" --notes-file /tmp/notas.md
