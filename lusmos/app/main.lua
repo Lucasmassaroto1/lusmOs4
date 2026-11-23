@@ -11,7 +11,7 @@ local U = require("ui")
 local lg = love.graphics
 
 local VERSION = "4"              -- versao mostrada na tela
-local BUILD = "4-2026.11.23a"    -- numero interno (so aparece no registro de erros)
+local BUILD = "4-2026.11.23b"    -- numero interno (so aparece no registro de erros)
 local NEXT_FILE = os.getenv("LUSMOS_NEXT") or "/tmp/lusmos_next"
 local STATE_FILE = "/tmp/lusmos_state.lua"
 local CACHE_FILE = "/tmp/lusmos_counts.lua"
@@ -164,7 +164,7 @@ local function runTool(script)
 end
 
 local function launchGame(game)
-  push("launch", game)
+  if game.zipped then push("prepare", { game = game }) else push("launch", game) end
 end
 
 -- ================================================================ leitura das listas em segundo plano
@@ -2611,6 +2611,91 @@ Screens.coregame = function(arg)
     end
     return rows
   end, { sub = U.safe(g.name), aLabel = "Usar" })
+end
+
+-- ================================================================ preparar jogo compactado (.zip)
+Screens.prepare = function(arg)
+  local g = arg.game
+  local s = { t = 0, phase = "start" }
+  local PRIO = { ".m3u", ".cue", ".chd", ".pbp", ".cso", ".iso", ".gdi", ".ccd" }
+  function s:begin()
+    self.files, self.total = data.zipInfo(g)
+    if #self.files == 0 then self.phase = "vazio"; return end
+    if data.freeBytes(g.path:match("^(.*)/")) < self.total + 50 * 1024 * 1024 then
+      self.phase = "espaco"; return
+    end
+    self.dir = data.startUnzip(g)
+    self.phase = "unzip"
+  end
+  function s:update(dt)
+    self.t = self.t + dt
+    if self.phase == "start" then
+      if self.t > 0.15 then self:begin() end
+    elseif self.phase == "unzip" then
+      self.pollT = (self.pollT or 0) - dt
+      if self.pollT <= 0 then
+        self.pollT = 0.4
+        local got = 0
+        for _, f in ipairs(self.files) do got = got + data.fileSize(self.dir .. "/" .. f.name:match("([^/]+)$")) end
+        self.got = got
+        local rc = data.unzipDone()
+        if rc then
+          if rc ~= 0 then self.phase = "erro"; return end
+          local best = nil
+          for _, ext in ipairs(PRIO) do
+            for _, f in ipairs(self.files) do
+              if not best and f.name:lower():sub(-#ext) == ext then best = f end
+            end
+          end
+          best = best or self.files[1]
+          data.finishUnzip(g, self.dir .. "/" .. best.name:match("([^/]+)$"))
+          self.phase = "ok"
+          self.okT = self.t
+        end
+      end
+    elseif self.phase == "ok" and self.t - self.okT > 0.8 then
+      replace("launch", g)
+    end
+  end
+  function s:press(b)
+    if (self.phase == "vazio" or self.phase == "espaco" or self.phase == "erro") and (b == "a" or b == "b") then pop() end
+  end
+  function s:draw()
+    U.rect(0, 0, 640, 480, 0, U.c.bg)
+    U.logo(20, 14, 22)
+    U.text("Preparando o jogo", 52, 13, U.font("m", 19), U.c.text)
+    U.drawStatus(620, 15, U.c.text2)
+    local item = gameItem(g)
+    U.tile(40, 90, 150, item, 1, 14)
+    U.text(g.name, 214, 96, U.font("m", 18), U.c.text, 1, 390)
+    U.text(g.system.fullname or g.system.name, 214, 124, U.font("r", 13), U.c.muted, 1, 390)
+    local msg, sub = "", ""
+    local ph = self.phase
+    if ph == "start" or ph == "unzip" then
+      msg = "Descompactando…"
+      sub = "Só na primeira vez. Depois o jogo abre direto."
+      local p = (self.total and self.total > 0) and math.min(1, (self.got or 0) / self.total) or 0
+      U.rect(214, 200, 380, 8, 4, U.c.line)
+      U.gradientBar(214, 200, 380 * p, 8, U.c.accent, U.c.accent2, 1)
+      local mb = function(n) return string.format("%.0f MB", (n or 0) / 1048576) end
+      U.text(mb(self.got) .. " de " .. mb(self.total), 214, 216, U.font("r", 13), U.c.text2)
+      U.text(math.floor(p * 100) .. "%", 214, 216, U.font("m", 13), U.c.text, 1, 380, "right")
+    elseif ph == "ok" then
+      msg, sub = "Pronto!", "Abrindo o jogo…"
+    elseif ph == "vazio" then
+      msg, sub = "Esse .zip não tem um jogo deste console", "Confira se o arquivo é mesmo de " .. (g.system.fullname or g.system.name) .. "."
+    elseif ph == "espaco" then
+      msg, sub = "Falta espaço no cartão", string.format("O jogo precisa de %.1f GB livres na EASYROMS.", (self.total or 0) / 1073741824)
+    elseif ph == "erro" then
+      msg, sub = "Não deu para descompactar", "O arquivo pode estar corrompido. O .zip continua no cartão."
+    end
+    U.text(msg, 214, 158, U.font("m", 16), U.c.text, 1, 390)
+    U.text(sub, 214, 248, U.font("r", 13), U.c.muted, 1, 390)
+    U.rect(0, 428, 640, 1, 0, U.c.line)
+    if ph == "vazio" or ph == "espaco" or ph == "erro" then U.hints({ { "B", "Voltar" } }, 616, 446)
+    else U.text("Não desligue o console.", 24, 446, U.font("r", 13), U.c.text2) end
+  end
+  return s
 end
 
 -- ================================================================ teclado virtual

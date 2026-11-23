@@ -168,6 +168,49 @@ local function firstExistingEarly(list)
   return nil
 end
 
+-- ---------------------------------------------------------------- jogos compactados (.zip)
+-- descompacta em segundo plano na mesma pasta; o .zip so e apagado se der tudo certo
+function M.zipInfo(g)
+  local files, total = {}, 0
+  for _, l in ipairs(M.popen_lines("unzip -l " .. M.shquote(g.path) .. " 2>/dev/null")) do
+    local size, name = l:match("^%s*(%d+)%s+%S+%s+%S+%s+(.+)$")
+    if size and name and not name:match("/$") then
+      local ext = (name:match("(%.[^%./]+)$") or ""):lower()
+      if g.system.exts[ext] then files[#files + 1] = { name = name, size = tonumber(size) } end
+      total = total + tonumber(size)
+    end
+  end
+  return files, total
+end
+function M.freeBytes(dir)
+  local l = M.popen_lines("df -B1 --output=avail " .. M.shquote(dir) .. " 2>/dev/null | tail -n1")[1]
+  return tonumber(l or "") or 0
+end
+function M.startUnzip(g)
+  local dir = g.path:match("^(.*)/[^/]+$")
+  local done = "/tmp/lusmos_unzip.done"
+  os.remove(done)
+  os.execute("(unzip -o -j " .. M.shquote(g.path) .. " -d " .. M.shquote(dir) .. " -x '*.txt' '*.nfo' '*.url' >/tmp/lusmos_unzip.log 2>&1; echo $? > " .. done .. ") &")
+  return dir
+end
+function M.unzipDone()
+  local t = readfile("/tmp/lusmos_unzip.done")
+  if not t then return nil end
+  return tonumber(t:match("%d+")) or 1
+end
+function M.fileSize(path)
+  local f = io.open(path, "rb")
+  if not f then return 0 end
+  local n = f:seek("end"); f:close()
+  return n or 0
+end
+-- depois de descompactar: o jogo passa a apontar para o arquivo novo e o .zip sai
+function M.finishUnzip(g, newPath)
+  os.remove(g.path)
+  g.path = newPath
+  g.zipped = nil
+end
+
 -- ---------------------------------------------------------------- ajustes por jogo
 -- nome trocado e "escondido" ficam em overrides.tsv; emulador por jogo em cores.tsv
 M.overrides, M.gameCores = {}, {}
@@ -419,6 +462,8 @@ function M.loadSystems()
       count = 0,
     }
     for e in (tag(block, "extension") or ""):gmatch("%S+") do sys.exts[e:lower()] = true end
+    -- consoles cujo emulador nao abre .zip: o lusmOS mostra o .zip e descompacta na primeira vez
+    if M.ZIP_PREP[sys.name] and not sys.exts[".zip"] then sys.zipPrep = true end
     local emus = block:match("<emulators>(.-)</emulators>")
     if emus then
       for ename, ebody in emus:gmatch('<emulator name="(.-)"%s*>(.-)</emulator>') do
@@ -526,6 +571,7 @@ end
 -- devolve lista de jogos do sistema (com cache)
 -- lista os arquivos; com "y" (dentro de uma corrotina) o find roda em segundo plano
 -- e a tela continua respondendo enquanto ele trabalha
+M.ZIP_PREP = { ppsspp = true, psp = true, pspminis = true, psx = true, segacd = true, saturn = true, dreamcast = true, pcenginecd = true }
 local scanSeq = 0
 local function listFiles(dir, depth, y)
   local cmd = "find " .. M.shquote(dir) .. " -maxdepth " .. depth .. " -type f"
@@ -564,7 +610,8 @@ function M.scanSystem(sys, y)
       end
       local ext = (full:match("(%.[^%./]+)$") or ""):lower()
       local base = full:match("([^/]+)$")
-      if not skip and sys.exts[ext] and base:sub(1, 1) ~= "." and not base:match("^Scan_for_new_games") then
+      local zipped = ext == ".zip" and sys.zipPrep
+      if not skip and (sys.exts[ext] or zipped) and base:sub(1, 1) ~= "." and not base:match("^Scan_for_new_games") then
         local m = meta[full] or {}
         local img = nil
         if m.image then
@@ -584,6 +631,7 @@ function M.scanSystem(sys, y)
           folder = rel:match("^(.*)/[^/]+$"),
           esEmu = m.emulator, esCore = m.core,
           esHidden = m.hidden,
+          zipped = zipped or nil,
         }
         local g = games[#games]
         local ov = M.overrides[sys.name .. "\t" .. full]
@@ -609,6 +657,7 @@ function M.countSystem(sys)
   if sys.games then return sys.count end
   local exts = {}
   for e in pairs(sys.exts) do exts[#exts + 1] = "-iname " .. M.shquote("*" .. e) end
+  if sys.zipPrep then exts[#exts + 1] = "-iname '*.zip'" end
   if #exts == 0 then return 0 end
   local paths = M.shquote(sys.path)
   for _, p in ipairs(sys.extraPaths or {}) do paths = paths .. " " .. M.shquote(p) end
