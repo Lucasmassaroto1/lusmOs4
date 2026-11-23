@@ -11,7 +11,7 @@ local U = require("ui")
 local lg = love.graphics
 
 local VERSION = "4"              -- versao mostrada na tela
-local BUILD = "4-2026.11.23b"    -- numero interno (so aparece no registro de erros)
+local BUILD = "4-2026.11.23c"    -- numero interno (so aparece no registro de erros)
 local NEXT_FILE = os.getenv("LUSMOS_NEXT") or "/tmp/lusmos_next"
 local STATE_FILE = "/tmp/lusmos_state.lua"
 local CACHE_FILE = "/tmp/lusmos_counts.lua"
@@ -271,7 +271,7 @@ local watch = { t = 0, vt = 0, bright = nil, vol = nil }
 -- brilho e volume ficam salvos (gravados 1,5 s depois da ultima mudanca)
 local function rememberHW(kind, value)
   if not value then return end
-  if kind == "volume" then data.config.volume = value else data.config.brightness = value end
+  if kind == "volume" then data.config.volume = value; data.saveVolume(value) else data.config.brightness = value end
   hwSave = 1.5
 end
 
@@ -283,7 +283,8 @@ local function restoreHW()
   f = io.open(mark, "w")
   if f then f:write("1"); f:close() end
   if data.config.brightness then data.setBrightness(data.config.brightness) end
-  if data.config.volume then data.setVolume(data.config.volume) end
+  local vol = data.savedVolume() or data.config.volume
+  if vol then data.setVolume(vol) end
 end
 
 local function changeVolume(d)

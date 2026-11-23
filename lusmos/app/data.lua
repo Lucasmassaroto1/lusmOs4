@@ -1102,15 +1102,24 @@ function M.brightnessPct()
   return p
 end
 
+-- volume em escala "mapeada" (-M): segue o ouvido, e nao o valor bruto do chip.
+-- Na escala bruta, metade da barra ja e quase mudo e o fim dela estoura de alto.
+M.VOL_FILE = M.CONF_DIR .. "/volume"
 function M.getVolume()
-  local l = M.popen_lines("amixer sget Playback | awk -F'[][]' '/Left:/ { print $2 }'")
+  local l = M.popen_lines("amixer -M sget Playback | awk -F'[][]' '/Left:/ { print $2; exit }'")
   return tonumber((l[1] or ""):match("(%d+)"))
 end
-
 function M.setVolume(pct)
   pct = math.max(0, math.min(100, math.floor(pct + 0.5)))
   M.volPct = pct
-  os.execute("amixer -q sset Playback " .. math.floor(pct) .. "% >/dev/null 2>&1")
+  os.execute("amixer -q -M sset Playback " .. math.floor(pct) .. "% >/dev/null 2>&1")
+end
+-- ultimo volume salvo (tambem quando mudado dentro de um jogo, pelo servico do volume)
+function M.savedVolume()
+  return tonumber((readfile(M.VOL_FILE) or ""):match("(%d+)"))
+end
+function M.saveVolume(pct)
+  writefile(M.VOL_FILE, tostring(math.floor(pct)) .. "\n")
 end
 
 return M
