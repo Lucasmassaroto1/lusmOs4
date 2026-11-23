@@ -1,0 +1,25 @@
+name: Apagar releases
+
+# Apaga as releases (e as tags) informadas. Rodar à mão em Actions › Apagar releases.
+on:
+  workflow_dispatch:
+    inputs:
+      tags:
+        description: "Tags separadas por espaço (ex.: v4-2026.11.23b v4-2026.11.23c)"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  apagar:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Apagar
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAGS: ${{ inputs.tags }}
+        run: |
+          for t in $TAGS; do
+            gh release delete "$t" --cleanup-tag --yes -R "$GITHUB_REPOSITORY" && echo "apagada: $t"
+          done
