@@ -28,8 +28,9 @@ saved=$(grep -o '[0-9]*' "$VOLFILE" 2>/dev/null | head -n1)
 while true; do
   stdbuf -oL amixer events 2>/dev/null | while read -r line; do
     case "$line" in *Playback*|*value*|*VALUE*) ;; *) continue ;; esac
-    # espera os botoes pararem (segurar o volume gera varios eventos)
-    while read -r -t 0.15 more; do :; done
+    # espera parar de mexer no volume e mostra uma mensagem so, com o valor final
+    # (o RetroArch empilha uma mensagem nova a cada envio; nao da para atualizar a anterior)
+    while read -r -t 0.7 more; do :; done
     v=$(pct)
     [ -z "$v" ] && continue
     save "$v"

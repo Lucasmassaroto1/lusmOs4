@@ -48,7 +48,7 @@ if [ -f "$SRC/es-bundle.tar.gz" ] && [ ! -f "$D/emulationstation" ]; then
   fi
   rm -rf "$TMP"
 fi
-for f in es-app.sh guard.sh online-update.sh; do
+for f in es-app.sh guard.sh online-update.sh thumbs.sh; do
   [ -f "$SRC/$f" ] && put "$SRC/$f" "/opt/lusmos/$f" 755
 done
 

@@ -168,6 +168,49 @@ local function firstExistingEarly(list)
   return nil
 end
 
+-- ---------------------------------------------------------------- miniaturas das capas
+-- capas grandes demoram para abrir; o thumbs.sh cria uma copia pequena (256 px) em segundo plano
+M.THUMB_DIR = M.ROOT_ROMS .. "/.lusmos-thumbs"
+M.THUMBS_SCRIPT = os.getenv("LUSMOS_THUMBS") or "/opt/lusmos/thumbs.sh"
+local thumbQ, thumbSeen = {}, {}
+local function strhash(str)
+  local h1, h2 = 5381, 52711
+  for i = 1, #str do
+    local c = str:byte(i)
+    h1 = (h1 * 33 + c) % 4294967296
+    h2 = (h2 * 31 + c) % 4294967296
+  end
+  return string.format("%08x%08x", h1, h2)
+end
+function M.thumbPath(path)
+  local ext = (path:match("%.([^%./]+)$") or ""):lower()
+  if ext ~= "png" and ext ~= "jpg" and ext ~= "jpeg" then ext = "png" end
+  local h = strhash(path)
+  return M.THUMB_DIR .. "/" .. h:sub(1, 2) .. "/" .. h .. "." .. ext
+end
+function M.queueThumb(src, dst)
+  if thumbSeen[src] then return end
+  thumbSeen[src] = true
+  thumbQ[#thumbQ + 1] = src .. "\t" .. (dst or M.thumbPath(src))
+end
+-- grava a fila e acorda o gerador (chamado de tempos em tempos pela interface)
+function M.flushThumbs()
+  if #thumbQ == 0 then return end
+  local f = io.open("/tmp/lusmos_thumbq.txt", "a")
+  if not f then return end
+  f:write(table.concat(thumbQ, "\n"), "\n")
+  f:close()
+  thumbQ = {}
+  os.execute("nohup " .. M.shquote(M.THUMBS_SCRIPT) .. " >/dev/null 2>&1 &")
+end
+-- todas as capas de um console entram na fila (o gerador pula as que ja existem)
+function M.queueSystemThumbs(sys)
+  for _, g in ipairs(sys.games or {}) do
+    if g.image then M.queueThumb(g.image) end
+  end
+  if sys.image then M.queueThumb(sys.image) end
+end
+
 -- ---------------------------------------------------------------- jogos compactados (.zip)
 -- descompacta em segundo plano na mesma pasta; o .zip so e apagado se der tudo certo
 function M.zipInfo(g)
@@ -522,8 +565,57 @@ local function cleanName(file)
   return n
 end
 
+-- o gamelist.xml grande (milhares de jogos com descricao) demora para ler; o resultado
+-- fica guardado e so e lido de novo quando o arquivo muda (tamanho + final do arquivo)
+local function glSignature(path)
+  local f = io.open(path, "rb")
+  if not f then return nil end
+  local size = f:seek("end")
+  f:seek("set", math.max(0, size - 4096))
+  local tail = f:read("*a") or ""
+  f:close()
+  local h = 0
+  for i = 1, #tail, 3 do h = (h * 31 + tail:byte(i)) % 2147483647 end
+  return size .. ":" .. h
+end
+local function glCacheFile(dir)
+  return M.CONF_DIR .. "/cache/gl_" .. dir:gsub("[^%w]", "_") .. ".lua"
+end
+local function saveGlCache(file, sig, map, dir)
+  os.execute("mkdir -p " .. M.shquote(M.CONF_DIR .. "/cache"))
+  local out = { "-- " .. sig, "return {" }
+  local function q(v) return v == nil and "nil" or string.format("%q", v) end
+  for path, m in pairs(map) do
+    if m.base == dir then
+      local d = m.desc and m.desc:sub(1, 600) or nil
+      out[#out + 1] = string.format("[%q]={name=%s,image=%s,fav=%s,lastplayed=%s,playcount=%s,desc=%s,developer=%s,releasedate=%s,emulator=%s,core=%s,hidden=%s},",
+        path, q(m.name), q(m.image), tostring(m.fav), q(m.lastplayed), tostring(m.playcount), q(d), q(m.developer),
+        q(m.releasedate), q(m.emulator), q(m.core), tostring(m.hidden))
+    end
+  end
+  out[#out + 1] = "}"
+  writefile(file, table.concat(out, "\n"))
+end
+
 local function parseGamelist(sys, dir, map, y)
-  local s = readfile(dir .. "/gamelist.xml")
+  local glpath = dir .. "/gamelist.xml"
+  local sig = glSignature(glpath)
+  if not sig then return end
+  local cfile = glCacheFile(dir)
+  local cf = io.open(cfile, "r")
+  if cf then
+    local first = cf:read("*l") or ""
+    cf:close()
+    if first == "-- " .. sig then
+      local chunk = loadfile(cfile)
+      local ok, t = pcall(chunk or error)
+      if ok and type(t) == "table" then
+        for path, m in pairs(t) do m.base = dir; map[path] = m end
+        return
+      end
+    end
+  end
+  local s = readfile(glpath)
   if not s then return end
   local n = 0
   for g in s:gmatch("<game>(.-)</game>") do
@@ -548,6 +640,7 @@ local function parseGamelist(sys, dir, map, y)
       }
     end
   end
+  pcall(saveGlCache, cfile, sig, map, dir)
 end
 
 -- capa dos ports do PortMaster: o script aponta para a pasta do jogo (GAMEDIR), que tem cover.jpg
@@ -649,6 +742,7 @@ function M.scanSystem(sys, y)
   table.sort(games, function(a, b) return a.name:lower() < b.name:lower() end)
   sys.games = games
   sys.count = #games
+  M.queueSystemThumbs(sys)
   return games
 end
 

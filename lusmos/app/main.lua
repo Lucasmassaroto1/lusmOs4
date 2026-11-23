@@ -11,7 +11,7 @@ local U = require("ui")
 local lg = love.graphics
 
 local VERSION = "4"              -- versao mostrada na tela
-local BUILD = "4-2026.11.23c"    -- numero interno (so aparece no registro de erros)
+local BUILD = "4-2026.11.23d"    -- numero interno (so aparece no registro de erros)
 local NEXT_FILE = os.getenv("LUSMOS_NEXT") or "/tmp/lusmos_next"
 local STATE_FILE = "/tmp/lusmos_state.lua"
 local CACHE_FILE = "/tmp/lusmos_counts.lua"
@@ -3030,6 +3030,8 @@ function love.update(dt)
   if errs.t > 0 then errs.t = errs.t - dt; if errs.t <= 0 then errs.n = 0 end end
   if app.screen and app.screen.update then safeCall("update " .. tostring(app.screen.name), app.screen.update, app.screen, dt) end
   safeCall("leitura", bgUpdate, app.waiting and 0.035 or 0.006)
+  app.thumbT = (app.thumbT or 0) - dt
+  if app.thumbT <= 0 then app.thumbT = 2; pcall(data.flushThumbs) end
   watchHardware(dt)
   if app.updWatch then
     app.updT = (app.updT or 0) - dt

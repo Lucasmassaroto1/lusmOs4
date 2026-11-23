@@ -431,8 +431,13 @@ function U.cover(path)
   -- no maximo algumas capas novas por quadro, para a rolagem nao engasgar
   if (U.coverBudget or 1) <= 0 then return nil end
   U.coverBudget = (U.coverBudget or 1) - 1
-  local bytes = data.readfile(path)
+  -- usa a miniatura (pequena) quando ja existe; senao abre a original e pede a miniatura
+  local src = path
+  local tp = data.thumbPath(path)
+  if data.exists(tp) then src = tp else data.queueThumb(path, tp) end
+  local bytes = data.readfile(src)
   local img = nil
+  U.bboxes[path], quads[path] = nil, nil
   if bytes and #bytes > 0 then
     local ok, res = pcall(function()
       local fd = love.filesystem.newFileData(bytes, path:match("([^/]+)$") or "img.png")
@@ -440,8 +445,10 @@ function U.cover(path)
       -- area visivel (sem a margem transparente), para as capas ocuparem o bloco inteiro
       local w, h = id:getDimensions()
       local minx, miny, maxx, maxy = w, h, -1, -1
-      for yy = 0, h - 1, 3 do
-        for xx = 0, w - 1, 3 do
+      -- amostra no maximo ~90 pontos por lado (ler pixel a pixel e lento)
+      local step = math.max(2, math.floor(math.max(w, h) / 90))
+      for yy = 0, h - 1, step do
+        for xx = 0, w - 1, step do
           local _, _, _, a = id:getPixel(xx, yy)
           if a > 0.08 then
             if xx < minx then minx = xx end
@@ -452,7 +459,7 @@ function U.cover(path)
         end
       end
       if maxx >= minx then
-        U.bboxes[path] = { minx, miny, math.min(w, maxx + 2) - minx, math.min(h, maxy + 2) - miny }
+        U.bboxes[path] = { minx, miny, math.min(w, maxx + step) - minx, math.min(h, maxy + step) - miny }
       end
       return lg.newImage(id)
     end)
